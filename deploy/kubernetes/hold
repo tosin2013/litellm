@@ -1,0 +1,1 @@
+I would like to create tasks for this to be comptablie with deploying on openshift 4.17 you can review the documentation for kubernetes if i need to build my own container image for it that will be fine you can review the docker file and cratea a Containerfile for the openshift image
