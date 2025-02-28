@@ -23,6 +23,7 @@ from litellm.types.llms.openai import (
     AllMessageValues,
     ChatCompletionCachedContent,
     ChatCompletionSystemMessage,
+    ChatCompletionThinkingBlock,
     ChatCompletionToolCallChunk,
     ChatCompletionToolCallFunctionChunk,
     ChatCompletionToolParam,
@@ -80,7 +81,7 @@ class AnthropicConfig(BaseConfig):
         return super().get_config()
 
     def get_supported_openai_params(self, model: str):
-        return [
+        params = [
             "stream",
             "stop",
             "temperature",
@@ -94,6 +95,11 @@ class AnthropicConfig(BaseConfig):
             "response_format",
             "user",
         ]
+
+        if "claude-3-7-sonnet" in model:
+            params.append("thinking")
+
+        return params
 
     def get_json_schema_from_pydantic_object(
         self, response_format: Union[Any, Dict, None]
@@ -302,6 +308,7 @@ class AnthropicConfig(BaseConfig):
         model: str,
         drop_params: bool,
     ) -> dict:
+
         for param, value in non_default_params.items():
             if param == "max_tokens":
                 optional_params["max_tokens"] = value
@@ -358,7 +365,8 @@ class AnthropicConfig(BaseConfig):
                 optional_params["json_mode"] = True
             if param == "user":
                 optional_params["metadata"] = {"user_id": value}
-
+            if param == "thinking":
+                optional_params["thinking"] = value
         return optional_params
 
     def _create_json_tool_call_for_response_format(
@@ -584,12 +592,14 @@ class AnthropicConfig(BaseConfig):
     def extract_response_content(self, completion_response: dict) -> Tuple[
         str,
         Optional[List[Any]],
-        Optional[List[Dict[str, Any]]],
+        Optional[List[ChatCompletionThinkingBlock]],
+        Optional[str],
         List[ChatCompletionToolCallChunk],
     ]:
         text_content = ""
         citations: Optional[List[Any]] = None
-        thinking_blocks: Optional[List[Dict[str, Any]]] = None
+        thinking_blocks: Optional[List[ChatCompletionThinkingBlock]] = None
+        reasoning_content: Optional[str] = None
         tool_calls: List[ChatCompletionToolCallChunk] = []
         for idx, content in enumerate(completion_response["content"]):
             if content["type"] == "text":
@@ -615,8 +625,13 @@ class AnthropicConfig(BaseConfig):
             if content.get("thinking", None) is not None:
                 if thinking_blocks is None:
                     thinking_blocks = []
-                thinking_blocks.append(content)
-        return text_content, citations, thinking_blocks, tool_calls
+                thinking_blocks.append(cast(ChatCompletionThinkingBlock, content))
+        if thinking_blocks is not None:
+            reasoning_content = ""
+            for block in thinking_blocks:
+                if "thinking" in block:
+                    reasoning_content += block["thinking"]
+        return text_content, citations, thinking_blocks, reasoning_content, tool_calls
 
     def transform_response(
         self,
@@ -666,10 +681,11 @@ class AnthropicConfig(BaseConfig):
         else:
             text_content = ""
             citations: Optional[List[Any]] = None
-            thinking_blocks: Optional[List[Dict[str, Any]]] = None
+            thinking_blocks: Optional[List[ChatCompletionThinkingBlock]] = None
+            reasoning_content: Optional[str] = None
             tool_calls: List[ChatCompletionToolCallChunk] = []
 
-            text_content, citations, thinking_blocks, tool_calls = (
+            text_content, citations, thinking_blocks, reasoning_content, tool_calls = (
                 self.extract_response_content(completion_response=completion_response)
             )
 
@@ -680,6 +696,8 @@ class AnthropicConfig(BaseConfig):
                     "citations": citations,
                     "thinking_blocks": thinking_blocks,
                 },
+                thinking_blocks=thinking_blocks,
+                reasoning_content=reasoning_content,
             )
 
             ## HANDLE JSON MODE - anthropic returns single function call
