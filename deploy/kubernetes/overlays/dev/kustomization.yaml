@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../../base
+- litellm-secret.yaml
+- litellm-db-secret.yaml
+- route.yaml
+patches:
+- path: patch-scc.yaml
+  target:
+    kind: Deployment
+    name: litellm-proxy
+- path: patch-startup.yaml
+  target:
+    kind: Deployment
+    name: litellm-proxy
+- path: patch-liveness.yaml
+  target:
+    kind: Deployment
+    name: litellm-proxy

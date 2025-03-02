@@ -1,206 +1,101 @@
-# OpenShift Deployment Guide
+# LiteLLM Proxy on OpenShift
 
-This guide explains how to deploy LiteLLM Proxy on OpenShift 4.17+.
+This directory contains Kubernetes manifests for deploying LiteLLM Proxy on OpenShift.
 
 ## Prerequisites
 
-- OpenShift 4.17+ cluster
-- OpenShift CLI (`oc`) installed and configured
-- Access to Red Hat Container Registry
+- OpenShift 4.x cluster with cluster-admin access
+- `oc` CLI tool installed and configured
+- Access to Quay.io registry
 
-## Building the Container Image
+## Image Building and Pushing
 
-### Local Testing
+### GitHub Actions (Automated)
 
-Before deploying to OpenShift, you can test the container build and run it locally:
+The repository includes a GitHub Actions workflow that automatically builds and pushes the image to Quay.io on pushes and pull requests to the `dev` branch.
 
-1. Build the container image:
+Required GitHub Secrets:
+- `QUAY_USERNAME`: Your Quay.io username
+- `QUAY_PASSWORD`: Your Quay.io password/token
+
+The workflow:
+- Tags images with both the git commit SHA (8 characters) and `latest`
+- Pushes to `quay.io/takinosh/litellm-proxy`
+
+### Manual Build and Push
+
+To build and push manually:
+
 ```bash
-# Build with latest tag for local testing
-podman build -t litellm-proxy:latest -f Containerfile .
+# Login to Quay.io
+podman login -u='takinosh+litellmproxy' quay.io
+
+# Get the git commit SHA
+COMMIT_SHA=$(git rev-parse --short HEAD)
+
+# Build the image
+podman build -t quay.io/takinosh/litellm-proxy:${COMMIT_SHA} .
+podman tag quay.io/takinosh/litellm-proxy:${COMMIT_SHA} quay.io/takinosh/litellm-proxy:latest
+
+# Push the images
+podman push quay.io/takinosh/litellm-proxy:${COMMIT_SHA}
+podman push quay.io/takinosh/litellm-proxy:latest
 ```
 
-2. Test running the container locally:
+## OpenShift Configuration
 
-First, ensure your system is set up for rootless containers:
+### Security Context Constraints (SCC)
+
+The deployment requires a custom SCC to run as user 1001. Apply it before deploying:
+
 ```bash
-# Check if your user has proper subuid/subgid mappings
-grep $(whoami) /etc/subuid
-grep $(whoami) /etc/subgid
+# Create the custom SCC
+oc apply -f deploy/kubernetes/base/litellm-proxy-scc.yaml
 
-# If missing, set up user namespaces (as root)
-sudo usermod --add-subuids 100000-165535 $(whoami)
-sudo usermod --add-subgids 100000-165535 $(whoami)
-
-# Verify podman can run rootless
-podman info
+# Bind the SCC to the service account (done automatically in base/openshift-deployment.yaml)
 ```
 
-Run the container:
+### Deployment
+
+Two overlay configurations are provided:
+- `dev`: For development/testing
+- `prod`: For production deployment
+
+To deploy the dev environment:
+
 ```bash
-# Run the container with explicit user namespace
-podman run -d --name litellm-proxy \
-  --userns=keep-id \
-  -p 4000:4000 \
-  litellm-proxy:latest
+# Create dev secrets from example
+cp deploy/kubernetes/overlays/dev/.env.secret.example deploy/kubernetes/overlays/dev/.env.secret
+# Edit .env.secret with your actual values
 
-# Check container logs
-podman logs -f litellm-proxy
-
-# Test the health endpoint
-curl http://localhost:4000/health
+# Apply the dev overlay
+oc apply -k deploy/kubernetes/overlays/dev/
 ```
 
-3. Troubleshooting permission issues:
-- If you see "Permission denied" errors:
-  ```bash
-  # Remove any existing container
-  podman rm -f litellm-proxy
+To deploy to production:
 
-  # Run with debug logging
-  podman run -d --name litellm-proxy \
-    --userns=keep-id \
-    --security-opt label=disable \
-    -p 4000:4000 \
-    litellm-proxy:latest
-  ```
-
-- Check container user and permissions:
-  ```bash
-  # Verify user inside container
-  podman exec litellm-proxy id
-  
-  # Check directory permissions
-  podman exec litellm-proxy ls -la /opt/app-root/src
-  
-  # View container security settings
-  podman inspect litellm-proxy --format '{{.HostConfig.SecurityOpt}}'
-  ```
-
-### Building for OpenShift
-
-1. Get the git commit ID and build the container image:
 ```bash
-# Get the git commit ID
-GIT_COMMIT=$(git rev-parse --short HEAD)
+# Create prod secrets from example
+cp deploy/kubernetes/overlays/prod/.env.secret.example deploy/kubernetes/overlays/prod/.env.secret
+# Edit .env.secret with your actual values
 
-# Build with git commit as tag
-podman build -t litellm-proxy:${GIT_COMMIT} -f Containerfile .
-
-# Also tag as latest
-podman tag litellm-proxy:${GIT_COMMIT} litellm-proxy:latest
+# Apply the prod overlay
+oc apply -k deploy/kubernetes/overlays/prod/
 ```
 
-2. Tag and push to your container registry:
+### Verifying the Deployment
+
 ```bash
-# Replace with your registry
-podman tag litellm-proxy:${GIT_COMMIT} <your-registry>/litellm-proxy:${GIT_COMMIT}
-podman tag litellm-proxy:${GIT_COMMIT} <your-registry>/litellm-proxy:latest
+# Check the deployment status
+oc get deployment -n litellm-dev  # or litellm-prod for production
 
-# Push both tags
-podman push <your-registry>/litellm-proxy:${GIT_COMMIT}
-podman push <your-registry>/litellm-proxy:latest
-```
+# Check the pods
+oc get pods -n litellm-dev
 
-## Deployment
-
-1. Update the image reference in `openshift-deployment.yaml`:
-```yaml
-spec:
-  template:
-    spec:
-      containers:
-      - name: litellm-proxy
-        # Use specific git commit version
-        image: <your-registry>/litellm-proxy:${GIT_COMMIT}
-        # Or use latest
-        # image: <your-registry>/litellm-proxy:latest
-```
-
-2. Deploy to OpenShift:
-```bash
-oc apply -f deploy/kubernetes/openshift-deployment.yaml
-```
-
-3. Verify the deployment:
-```bash
-oc get pods
-oc get services
-oc get routes
+# Check the route
+oc get route -n litellm-dev
 ```
 
 ## Configuration
 
-### Environment Variables
-
-Add environment variables in the `openshift-deployment.yaml` under the `env` section:
-
-```yaml
-env:
-- name: PYTHONUNBUFFERED
-  value: "1"
-- name: PORT
-  value: "4000"
-# Add your configuration here
-```
-
-### Resource Limits
-
-The deployment is configured with the following resource limits:
-- CPU: 1000m (1 core)
-- Memory: 1Gi
-
-Adjust these in `openshift-deployment.yaml` based on your needs.
-
-### Health Checks
-
-The deployment includes:
-- Readiness probe: `/health`
-- Liveness probe: `/health`
-
-Both probes are configured with:
-- Initial delay: 30 seconds
-- Period: 10 seconds
-- Timeout: 3 seconds
-
-## Security
-
-The container runs with:
-- Non-root user (UID 1001)
-- Restricted security context
-- No privilege escalation
-- All capabilities dropped
-
-## Networking
-
-The service is exposed via:
-- Internal Service: Port 4000
-- OpenShift Route: HTTPS with edge termination
-
-## Monitoring
-
-Monitor the deployment using:
-```bash
-# View logs
-oc logs deploymentconfig/litellm-proxy
-
-# Check deployment status
-oc status
-```
-
-## Troubleshooting
-
-1. If pods fail to start, check logs:
-```bash
-oc get pods
-oc logs <pod-name>
-```
-
-2. For permission issues, verify the service account has necessary permissions:
-```bash
-oc describe pod <pod-name>
-```
-
-3. For networking issues, verify the route is created:
-```bash
-oc get routes
+The base configuration is in `base/proxy_server_config.yaml`. Environment-specific overrides can be added in the respective overlay directories.

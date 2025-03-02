@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm-proxy
+spec:
+  template:
+    spec:
+      containers:
+      - name: proxy
+        command: ["/bin/sh"]
+        args: ["/opt/app-root/src/init.sh", "--port", "4000"]
+        volumeMounts:
+        - name: init-script
+          mountPath: /opt/app-root/src/init.sh
+          subPath: init.sh
+      volumes:
+      - name: init-script
+        configMap:
+          name: init-db-script
+          defaultMode: 0755

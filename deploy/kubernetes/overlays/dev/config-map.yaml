@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-config
+data:
+  config.yaml: |
+    # Minimal configuration with single VLLM model using service name
+    model_list:
+      - model_name: vllm-mistral
+        litellm_params:
+          model: mistralai/Mistral-7B-Instruct-v0.2
+          api_base: http://vllm.vllm.svc.cluster.local:8000/v1
+          api_type: vllm
+
+    litellm_settings:
+      drop_params: True
+      max_retries: 3
+      success_callback: ["logging"]

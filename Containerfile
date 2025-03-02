@@ -49,6 +49,7 @@ RUN pip install --no-cache-dir *.whl && \
     pip install --no-cache-dir nodejs-bin prisma && \
     # Build Admin UI
     chmod +x docker/build_admin_ui.sh && \
+    chmod +x docker/prod_entrypoint.sh && \
     ./docker/build_admin_ui.sh && \
     # Generate Prisma client
     mkdir -p .prisma && \

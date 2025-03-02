@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: init-db-script
+data:
+  init.sh: |
+    #!/bin/sh
+    set -e
+
+    echo "Starting initialization script..."
+    
+    # Generate Prisma client
+    echo "Generating Prisma client..."
+    prisma generate
+    
+    # Push database schema without migrations
+    echo "Initializing database schema..."
+    prisma db push --skip-generate --accept-data-loss
+    
+    echo "Database initialization completed."
+    
+    # Start the application
+    echo "Starting LiteLLM..."
+    if [ "$USE_DDTRACE" = "true" ]; then
+        export DD_TRACE_OPENAI_ENABLED="False"
+        exec ddtrace-run litellm --host 0.0.0.0 "$@"
+    else
+        exec litellm --host 0.0.0.0 "$@"
+    fi

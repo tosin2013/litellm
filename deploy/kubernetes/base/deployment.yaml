@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm-proxy
+spec:
+  selector:
+    matchLabels:
+      app: litellm-proxy
+  template:
+    metadata:
+      labels:
+        app: litellm-proxy
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: postgres:latest
+        command: ['sh', '-c', 'until pg_isready -h litellm-db -p 5432; do echo waiting for database; sleep 2; done;']
+      containers:
+      - name: proxy
+        image: quay.io/takinosh/litellm-proxy:latest
+        ports:
+        - containerPort: 4000
+        env:
+        - name: LITELLM_MASTER_KEY
+          valueFrom:
+            secretKeyRef:
+              name: litellm-secret
+              key: master-key
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: litellm-db-secret
+              key: database-url
+        volumeMounts:
+        - name: config
+          mountPath: /opt/app-root/src/config.yaml
+          subPath: config.yaml
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 4000
+            httpHeaders:
+            - name: Authorization
+              value: "Bearer dev-master-key-123"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: "16Gi"
+            cpu: "4"
+            nvidia.com/gpu: "1"
+          limits:
+            memory: "32Gi"
+            cpu: "8"
+            nvidia.com/gpu: "1"
+      volumes:
+      - name: config
+        configMap:
+          name: litellm-config

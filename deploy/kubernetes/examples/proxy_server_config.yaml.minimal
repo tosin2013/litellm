@@ -1,0 +1,11 @@
+# Minimal configuration with single VLLM model
+model_list:
+  - model_name: vllm-mistral
+    litellm_params:
+      model: mistralai/Mistral-7B-Instruct-v0.1
+      api_base: http://vllm.vllm.svc.cluster.local:8000
+
+litellm_settings:
+  drop_params: True
+  max_retries: 3
+  success_callback: ["logging"]

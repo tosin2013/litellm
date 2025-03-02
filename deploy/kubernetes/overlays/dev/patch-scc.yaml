@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm-proxy
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsUser: 1001 # Keep the user, but use anyuid SCC
+      containers:
+      - name: proxy
+        securityContext:
+          allowPrivilegeEscalation: false # Keep existing settings
+          runAsNonRoot: true

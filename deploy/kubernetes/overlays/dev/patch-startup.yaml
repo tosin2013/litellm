@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm-proxy
+spec:
+  template:
+    spec:
+      containers:
+      - name: proxy
+        command:
+          - litellm
+        args:
+          - --host
+          - "0.0.0.0"
+          - --port
+          - "4000"
+          - --config
+          - "/opt/app-root/src/config.yaml"

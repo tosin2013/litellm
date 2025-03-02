@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm-proxy
+spec:
+  template:
+    spec:
+      containers:
+      - name: proxy
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 4000
+            httpHeaders:
+            - name: Authorization
+              value: "Bearer dev-master-key-123"
+          initialDelaySeconds: 30
+          periodSeconds: 10

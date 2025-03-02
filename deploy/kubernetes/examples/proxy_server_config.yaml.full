@@ -1,0 +1,32 @@
+# Full configuration with all supported model types
+model_list:
+  - model_name: vllm-mistral # User-facing model name for the VLLM deployment
+    litellm_params:
+      model: mistralai/Mistral-7B-Instruct-v0.1 # Actual model being served by VLLM
+      api_base: http://vllm.vllm.svc.cluster.local:8000 # Internal Kubernetes service address
+
+  - model_name: openai-gpt-3.5-turbo # User-facing model name for OpenAI
+    litellm_params:
+      model: gpt-3.5-turbo # OpenAI model identifier
+      api_key: ${OPENAI_API_KEY} # Use environment variable for API key
+      api_base: https://api.openai.com/v1 # OpenAI API base URL
+
+  - model_name: gemini-pro # User-facing model name for Google Gemini
+    litellm_params:
+      model: gemini-pro #  Gemini model identifier
+      api_key: ${GOOGLE_API_KEY} # Use environment variable for API key
+
+  - model_name: ollama-llama2 # User-facing model name for Ollama (assuming local deployment)
+    litellm_params:
+      model: llama2 # Ollama model identifier
+      api_base: http://localhost:11434  #  Ollama API base (adjust if deployed differently)
+
+  - model_name: anthropic-claude-3 # User-facing model name for Anthropic Claude 3
+    litellm_params:
+      model: claude-3-opus-20240229 # Anthropic Claude 3 model identifier
+      api_key: ${ANTHROPIC_API_KEY} # Use environment variable for API key
+
+litellm_settings:
+  drop_params: True  # Drop any parameters not supported by the target LLM
+  max_retries: 3 # Number of retries
+  success_callback: ["logging"] # Enable logging on success

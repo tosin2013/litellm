@@ -1,0 +1,10 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm-proxy
+spec:
+  template:
+    spec:
+      containers:
+        - name: proxy
+          image: <YOUR_IMAGE_HERE>
